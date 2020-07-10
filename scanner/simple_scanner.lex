@@ -2,6 +2,7 @@
 #include<stdio.h>
 #include<string.h>
 unsigned charCount = 1,lineCount = 1;
+int ispnsymbol = 0 ;
 void print_char();
 void PrintMsg( int lineNum, int charNum, char *text, int catogory ) ;
 void PrintErrMsg( int lineNum, int charNum, char *text, int catogory ) ;
@@ -44,10 +45,9 @@ whitespace			[ \t]+
 symbol_2char		[:<>=]=
 symbol_1char		[;:()><=\[\]+\-*/,\.]
 symbol				({symbol_2char}|{symbol_1char})
-special_pn			({integer}|{real})[ \t]*[+-]({integer}|{real})
 integer				[+-]?(0|[1-9][0-9]*)
 identifier			[_a-zA-Z][_a-zA-Z0-9]*
-id_error			[^_a-zA-Z \t\n\r;:()><=\[\]+\-*/,\.']+[[:graph:]]*[_a-zA-Z]+[^;:()><=\[\]+\-*/,\. \n\r]*
+id_error			[^_a-zA-Z \t\n\r;:()><=\[\]+\-*/,\.']+[_a-zA-Z]+[^;:()><=\[\]+\-*/,\. \n\r]*
 qstring_errorS		'[^';:()><=\[\]+\-*/,\. \n\r]*
 qstring_errorE		[^';:()><=\[\]+\-*/,\. \n\r]*'
 qstring_error		({qstring_errorS}|{qstring_errorE})
@@ -68,82 +68,54 @@ error_comment		{error_commentS}|{error_commentE}
 eol					\n
 
 %%
-{reservedword}	{ PrintMsg( lineCount, charCount, yytext, 1  ) ; charCount += yyleng ; }
+{reservedword}	{ ispnsymbol = 0 ; PrintMsg( lineCount, charCount, yytext, 1  ) ; charCount += yyleng ; }
 {whitespace}	{ charCount += yyleng ; }
-{integer}		{ PrintMsg( lineCount, charCount, yytext, 4  ) ; charCount += yyleng ; }
-{error_int}		{ PrintErrMsg( lineCount, charCount, yytext, 4 ) ; charCount += yyleng ; }
-{real}			{ PrintMsg( lineCount, charCount, yytext, 5  ) ; charCount += yyleng ; }
-{error_real}	{ PrintErrMsg( lineCount, charCount, yytext, 5 ) ; charCount += yyleng ; }
-{special_pn}	{ char *str = malloc( sizeof(char)*yyleng+1 ) ;
-				  char *tempstr = malloc( sizeof(char)*yyleng+1 ) ;
-				  char *pch, *delim = malloc( sizeof(char) ) ;
-				  int length, i ;
-				  int isReal, isRealsign ;
-				  strcpy( str, yytext ) ;
-				  pch = strchr( str,'+' ) ;
-				  if ( pch[0] == '+' )
-					  delim[0] = '+' ;
-				  else
-					  delim[0] = '-' ;
-				  length = 0 ;
-				  isReal = 0 ;
-				  isRealsign = 0 ;
-				  for ( i = 0 ; i < yyleng ; ++i ) {
-					  if ( str[i] == '.' )
-						  isReal = 1 ;
-					  if ( str[i] == 'e' || str[i] == 'E' ) {
-						  isReal = 1 ;
-						  isRealsign = 1 ;
-					  }
-					  if ( str[i] == ' ' || str[i] == '\t' ) {
-						  ++length ;
-						  continue ;
-					  }
-					  else if ( isRealsign && ( str[i] == '+' || str[i] == '-' ) ) {
-					  	  isRealsign = 0 ;
-					  	  ++length ;
-						  strncat( tempstr, &str[i], 1 ) ;
-					  }
-					  else if ( str[i] == delim[0] ) {
-						  ++length ;
-						  break ;
-					  }
-					  else {
-						  ++length ;
-						  strncat( tempstr, &str[i], 1 ) ;
-					  }
+{integer}		{ 
+				  if ( ispnsymbol ) {
+				  	  ispnsymbol = 0 ;
+				  	  yyless(1) ;
+				  	  PrintMsg( lineCount, charCount, yytext, 3  ) ;
+				  	  charCount += yyleng ; 
 				  }
-				  if ( isReal )
-					  PrintMsg( lineCount, charCount, tempstr, 5  ) ;
-				  else
-					  PrintMsg( lineCount, charCount, tempstr, 4  ) ;
-				  PrintMsg( lineCount, charCount+length-1, delim, 3  ) ;
-				  isReal = 0 ;
-				  for ( i = length ; i < yyleng ; ++i ) {
-					  if ( str[i] == '.' || str[i] == 'e' || str[i] == 'E' )
-						  isReal = 1 ;
+				  else {
+					  ispnsymbol = 1 ; 
+					  PrintMsg( lineCount, charCount, yytext, 4  ) ; 
+					  charCount += yyleng ; 
 				  }
-				  if ( isReal )
-					  PrintMsg( lineCount, charCount+length, str+length, 5  ) ;
-				  else
-					  PrintMsg( lineCount, charCount+length, str+length, 4  ) ;
-				  
 				}
-{identifier}	{ if ( yyleng > 15 )
+{error_int}		{ PrintErrMsg( lineCount, charCount, yytext, 4 ) ; charCount += yyleng ; }
+{real}			{ if ( ispnsymbol ) {
+				  	  ispnsymbol = 0 ;
+				  	  yyless(1) ;
+				  	  PrintMsg( lineCount, charCount, yytext, 3  ) ;
+				  	  charCount += yyleng ; 
+				  }
+				  else {
+					  ispnsymbol = 1 ; 
+					  PrintMsg( lineCount, charCount, yytext, 5  ) ; 
+					  charCount += yyleng ; 
+				  }
+				}
+{error_real}	{ PrintErrMsg( lineCount, charCount, yytext, 5 ) ; charCount += yyleng ; }
+{identifier}	{ ispnsymbol = 1 ;
+				  if ( yyleng > 15 )
 					  PrintErrMsg( lineCount, charCount, yytext, 2 ) ;
 				  else
 					  PrintMsg( lineCount, charCount, yytext, 2  ) ; 
 				  charCount += yyleng ; 
 				}
-{id_error}		{ PrintErrMsg( lineCount, charCount, yytext, 2 ) ; charCount += yyleng ; }
-{qstring_error}	{ PrintErrMsg( lineCount, charCount, yytext, 6 ) ; charCount += yyleng ; }
-{quotedstring}	{ if ( yyleng > 30 )
+{id_error}		{ ispnsymbol = 0 ; PrintErrMsg( lineCount, charCount, yytext, 2 ) ; charCount += yyleng ; }
+{qstring_error}	{ ispnsymbol = 0 ; PrintErrMsg( lineCount, charCount, yytext, 6 ) ; charCount += yyleng ; }
+{quotedstring}	{ ispnsymbol = 1 ;
+				  if ( yyleng > 30 )
 					  PrintErrMsg( lineCount, charCount, yytext, 6 ) ;
 				  else
 					  PrintMsg( lineCount, charCount, yytext, 6  ) ; 
 				  charCount += yyleng ;
 				}
-{comment}		{ PrintMsg( lineCount, charCount, yytext, 7  ) ; charCount += yyleng ;
+{comment}		{ ispnsymbol = 0 ;
+				  PrintMsg( lineCount, charCount, yytext, 7  ) ;
+				  charCount += yyleng ;
 				  char *str = malloc( sizeof(char)*yyleng+1 ) ;
 				  strcpy( str, yytext ) ;
 				  int i, len ;
@@ -155,9 +127,9 @@ eol					\n
 				  }
 				  charCount = len ;
 				}
-{error_comment}	{ PrintErrMsg( lineCount, charCount, yytext, 7  ) ; charCount += yyleng ; }
-{symbol}		{ PrintMsg( lineCount, charCount, yytext, 3  ) ; charCount += yyleng ; }
-{eol}			{ lineCount++ ; charCount = 1 ; }
+{error_comment}	{ ispnsymbol = 0 ; PrintErrMsg( lineCount, charCount, yytext, 7  ) ; charCount += yyleng ; }
+{symbol}		{ ispnsymbol = 0 ; PrintMsg( lineCount, charCount, yytext, 3  ) ; charCount += yyleng ; }
+{eol}			{ ispnsymbol = 0 ; lineCount++ ; charCount = 1 ; }
 %%
 
 int main()
